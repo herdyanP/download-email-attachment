@@ -1,3 +1,5 @@
+from inspect import Attribute
+from typing import final
 import schedule
 import time
 import imaplib
@@ -11,16 +13,21 @@ mailSv = "imap.gmail.com"
 mailUser = "herdyan.pradana@gmail.com"
 mailPass = "drzsikqpbxcvrkqt"
 outputDir = os.getcwd()
+statSuccess = True
 
 def start():
+    global statSuccess
+    statSuccess = False
+
     now = datetime.datetime.now()
     dtformat = now.strftime('%Y%m%d')
 
     printWithStamp(f'Fetching "Data Upload CSV {dtformat}"', end='... ')
+    mail = connectMail()
     try:
-        mail = connectMail()
         mail.select()
-        typ, data = mail.search(None, f'(SUBJECT "Data Upload CSV {dtformat}")')
+        # typ, data = mail.search(None, f'(SUBJECT "Data Upload CSV {dtformat}")')
+        typ, data = mail.search(None, f'(SUBJECT "{dtformat}")')
         for emailid in data[0].split():
             downloadAttachments(mail, emailid)
         
@@ -28,12 +35,17 @@ def start():
         uploadCSV(dtformat)
     except imaplib.IMAP4.error:
         print('Fail')
+    except AttributeError:
+        print('Fail')
 
 def connectMail():
-    mail = imaplib.IMAP4_SSL(mailSv)
-    mail.login(mailUser, mailPass)
-    mail.select()
-    return mail
+    try:
+        mail = imaplib.IMAP4_SSL(mailSv)
+        mail.login(mailUser, mailPass)
+        mail.select()
+        return mail
+    except:
+        return
 
 def downloadAttachments(mail, emailid):
     resp, data = mail.fetch(emailid, "(BODY.PEEK[])")
@@ -43,9 +55,11 @@ def downloadAttachments(mail, emailid):
         return
     for part in msg.walk():
         if part.get_content_maintype() != 'multipart' and part.get('Content-Disposition') is not None:
-            open(outputDir + '/' + part.get_filename(), 'wb').write(part.get_payload(decode=True))
+            # open(outputDir + '/csv/' + part.get_filename(), 'wb').write(part.get_payload(decode=True))
+            open(rf'{outputDir}\csv\{part.get_filename()}', 'wb').write(part.get_payload(decode=True))
 
 def uploadCSV(dtformat):
+    global statSuccess
     try:
         printWithStamp('Connecting to database', end = '... ')
         mydb = mysql.connector.connect(
@@ -60,8 +74,8 @@ def uploadCSV(dtformat):
 
     mycur = mydb.cursor()
     try:
-        printWithStamp(f'Processing "Data Upload CSV {dtformat}"', end = '... ')
-        with open(f'TABUNGAN_{dtformat}.csv') as csv_file:
+        printWithStamp(f'Processing "TABUNGAN_{dtformat}.csv"', end = '... ')
+        with open(rf'{outputDir}\csv\TABUNGAN_{dtformat}.csv') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             line_count = 0
             for row in csv_reader:
@@ -74,22 +88,32 @@ def uploadCSV(dtformat):
                 line_count += 1
 
             print('Done')
-            printWithStamp(f'Processed {line_count} lines in "Data Upload CSV {dtformat}"')
+            printWithStamp(f'Processed {line_count} lines in "TABUNGAN_{dtformat}.csv"')
             mydb.commit()
     except:
         print('Fail')
         printWithStamp(f'File TABUNGAN_{dtformat}.csv not found')
+    finally:
+        mycur.close()
+        mydb.close()
+        statSuccess = True
 
 def printWithStamp(*args, **kwargs):
     dt = datetime.datetime.now()
     ts = dt.strftime('%Y-%m-%d %H:%M:%S')
     print(f'({ts}) ' + ' '.join(map(str,args)), **kwargs)
 
+def startAgain():
+    if(statSuccess == False):
+        printWithStamp('Restarting the process since the last attempt failed')
+        start()
+
 
 
 # ========== MAIN CODE HERE ===========
 print("====== AUTO-UPLOADER MCOLLECTION SLEMAN ======")
 schedule.every().day.at("04:30").do(start)
+schedule.every().day.at("05:30").do(startAgain)
 while True:
     schedule.run_pending()
-    time.sleep(300)
+    time.sleep(1)
