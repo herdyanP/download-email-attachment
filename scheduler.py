@@ -90,13 +90,14 @@ def uploadCSV(dtformat):
             print('Done')
             printWithStamp(f'Processed {line_count} lines in "TABUNGAN_{dtformat}.csv"')
             mydb.commit()
+        
+        statSuccess = True
     except:
         print('Fail')
         printWithStamp(f'File TABUNGAN_{dtformat}.csv not found')
     finally:
         mycur.close()
         mydb.close()
-        statSuccess = True
 
 def printWithStamp(*args, **kwargs):
     dt = datetime.datetime.now()
@@ -117,3 +118,6 @@ schedule.every().day.at("05:30").do(startAgain)
 while True:
     schedule.run_pending()
     time.sleep(1)
+
+# buat compile:
+# pyinstaller --onefile --clean [nama_file]
