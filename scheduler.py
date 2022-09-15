@@ -15,28 +15,39 @@ mailPass = "drzsikqpbxcvrkqt"
 outputDir = os.getcwd()
 statSuccess = True
 
-def start():
+def init():
     global statSuccess
     statSuccess = False
 
-    now = datetime.datetime.now()
-    dtformat = now.strftime('%Y%m%d')
+    start()
 
-    printWithStamp(f'Fetching "Data Upload CSV {dtformat}"', end='... ')
-    mail = connectMail()
-    try:
-        mail.select()
-        # typ, data = mail.search(None, f'(SUBJECT "Data Upload CSV {dtformat}")')
-        typ, data = mail.search(None, f'(SUBJECT "{dtformat}")')
-        for emailid in data[0].split():
-            downloadAttachments(mail, emailid)
-        
-        print('Done')
-        uploadCSV(dtformat)
-    except imaplib.IMAP4.error:
-        print('Fail')
-    except AttributeError:
-        print('Fail')
+def start():
+    global statSuccess
+    now = datetime.datetime.now()
+    wk = now.isoweekday()
+
+    if(wk <= 5): #biar cuma jalan di weekday
+        while(statSuccess == False): #looping selama status masih gagal
+            now = datetime.datetime.now()
+            dtformat = now.strftime('%Y%m%d')
+
+            printWithStamp(f'Fetching "Data Upload CSV {dtformat}"', end='... ')
+            mail = connectMail()
+            try:
+                mail.select()
+                # typ, data = mail.search(None, f'(SUBJECT "Data Upload CSV {dtformat}")')
+                typ, data = mail.search(None, f'(SUBJECT "{dtformat}")')
+                for emailid in data[0].split():
+                    downloadAttachments(mail, emailid)
+                
+                print('Done')
+                uploadCSV(dtformat)
+            except imaplib.IMAP4.error:
+                print('Fail')
+            except AttributeError:
+                print('Fail')
+
+            time.sleep(900) #interval pengecekan
 
 def connectMail():
     try:
@@ -62,22 +73,31 @@ def uploadCSV(dtformat):
     global statSuccess
     try:
         printWithStamp('Connecting to database', end = '... ')
+        # ====== real ======
         mydb = mysql.connector.connect(
             host="192.168.3.81",
             user="mcollection",
             password="mediapos",
             database="mcollectionsleman"
         )
+
+        # ====== localhost ======
+        # mydb = mysql.connector.connect(
+        #     host="localhost",
+        #     user="root",
+        #     password="",
+        #     database="mcollectionsleman"
+        # )
         print('Done')
     except:
         print('Fail')
 
     mycur = mydb.cursor()
     try:
+        line_count = 0
         printWithStamp(f'Processing "TABUNGAN_{dtformat}.csv"', end = '... ')
         with open(rf'{outputDir}\csv\TABUNGAN_{dtformat}.csv') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
-            line_count = 0
             for row in csv_reader:
                 namaclear = row[2].replace("'", "")
                 alamclear = row[3].replace("'", "")
@@ -91,7 +111,9 @@ def uploadCSV(dtformat):
             printWithStamp(f'Processed {line_count} lines in "TABUNGAN_{dtformat}.csv"')
             mydb.commit()
         
-        statSuccess = True
+        if(line_count > 0):
+            statSuccess = True
+        
     except:
         print('Fail')
         printWithStamp(f'File TABUNGAN_{dtformat}.csv not found')
@@ -113,8 +135,7 @@ def startAgain():
 
 # ========== MAIN CODE HERE ===========
 print("====== AUTO-UPLOADER MCOLLECTION SLEMAN ======")
-schedule.every().day.at("04:30").do(start)
-schedule.every().day.at("05:30").do(startAgain)
+schedule.every().day.at("04:30").do(init)
 while True:
     schedule.run_pending()
     time.sleep(1)
