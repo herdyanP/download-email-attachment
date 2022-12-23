@@ -10,12 +10,10 @@ import csv
 import mysql.connector
 import yaml
 
-try:
-    config = yaml.safe_load(open('config.yml'))
-except:
-    print("Cannot read config file. Closing...")
-    time.sleep(10)
-    quit()
+import logging
+
+logdate = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+logging.basicConfig(filename=f'{logdate}.log', filemode='w', format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 outputDir = os.getcwd()
 statSuccess = True
@@ -33,12 +31,26 @@ def start():
 
     if(wk <= 5): #biar cuma jalan di weekday
         while(statSuccess == False): #looping selama status masih gagal
-            now = datetime.datetime.now()
-            dtformat = now.strftime('%Y%m%d')
-
-            printWithStamp(f'Fetching "Data Upload CSV {dtformat}"', end='... ')
-            mail = connectMail()
+            # Connect ke database
+            printWithStamp('Connecting to database', end = '...', flush=True)
             try:
+                mydb = mysql.connector.connect(
+                    host=config['dbHost'],
+                    user=config['dbUser'],
+                    password=config['dbPass'],
+                    database=config['dbName']
+                )
+                print('Done')
+            except Exception as e:
+                print('Fail')
+                logging.exception('Exception occured when connecting to database!')
+                quit()
+
+            # Fetch CSV dari email
+            dtformat = now.strftime('%Y%m%d')
+            printWithStamp(f'Fetching "Data Upload CSV {dtformat}"', end='... ')
+            try:
+                mail = connectMail()
                 mail.select()
                 # typ, data = mail.search(None, f'(SUBJECT "Data Upload CSV {dtformat}")')
                 typ, data = mail.search(None, f'(SUBJECT "{dtformat}")')
@@ -48,11 +60,13 @@ def start():
                 print('Done')
                 uploadCSV(dtformat)
             except imaplib.IMAP4.error:
+                logging.exception('Exception on mail')
                 print('Fail')
             except AttributeError:
+                logging.exception('Exception on mail')
                 print('Fail')
 
-            time.sleep(300) #interval pengecekan
+            time.sleep(10) #interval pengecekan
 
 def connectMail():
     try:
@@ -127,7 +141,6 @@ def uploadCSV(dtformat):
 
                 line_count += 1
 
-            # Pindah data non-duplikat dari saldotabungan_tmp ke saldotabungan           
             sql = f'insert into saldotabungan (CIF, SSREK, SSNAMA, SSALAMAT, SSSALDO, SSTGL, JPINJAMAN, STATUS) select CIF, SSREK, SSNAMA, SSALAMAT, SSSALDO, SSTGL, JPINJAMAN, STATUS from saldotabungan_tmp where SSREK not in (SELECT SSREK FROM saldotabungan WHERE SSTGL = "{dtnow}");'
             mycur.execute(sql)
 
@@ -155,14 +168,17 @@ def startAgain():
         printWithStamp('Restarting the process since the last attempt failed')
         start()
 
+try:
+    config = yaml.safe_load(open('config.yml'))
+except Exception as e:
+    logging.exception('Exception occured')
 
+    time.sleep(10)
+    quit()
 
 # ========== MAIN CODE HERE ===========
-print("====== AUTO-UPLOADER MCOLLECTION SLEMAN ======")
-schedule.every().day.at("04:30").do(init)
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+print("====== UPLOADER MCOLLECTION SLEMAN ======")
+init()
 
 # buat compile:
 # pyinstaller --onefile --clean [nama_file]

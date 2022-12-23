@@ -1,0 +1,12 @@
+  mailSv: imap.gmail.com
+  # mailUser: herdyan.pradana@gmail.com
+  # mailPass: drzsikqpbxcvrkqt
+  mailUser: cs1medianusa@gmail.com
+  mailPass: vpowalvnzfxhwmfv
+  # dbHost: 192.168.3.81
+  # dbUser: mcollection
+  # dbPass: mediapos
+  dbHost: localhost
+  dbUser: root
+  dbPass: 
+  dbName: mcollectionsleman
